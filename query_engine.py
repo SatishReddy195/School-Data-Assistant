@@ -8,9 +8,21 @@ from data_loader import (
     teachers_df,
 )
 
+from derived_metrics import (
+    student_pass_percentage,
+    total_revenue,
+    total_outstanding_fees,
+    average_attendance,
+    students_below_attendance,
+    pending_complaints_count,
+    active_student_count,
+    sports_participation_count,
+    teacher_count,
+)
+
 
 # =========================================================
-# Available School Datasets
+# DATASETS
 # =========================================================
 
 DATASETS = {
@@ -25,7 +37,7 @@ DATASETS = {
 
 
 # =========================================================
-# Supported Operations
+# ALLOWED OPERATIONS
 # =========================================================
 
 SUPPORTED_OPERATIONS = {
@@ -35,13 +47,8 @@ SUPPORTED_OPERATIONS = {
     "average",
     "min",
     "max",
-    "percentage",
 }
 
-
-# =========================================================
-# Supported Comparison Operators
-# =========================================================
 
 SUPPORTED_OPERATORS = {
     "==",
@@ -54,13 +61,12 @@ SUPPORTED_OPERATORS = {
 
 
 # =========================================================
-# Convert Values
+# VALUE CONVERSION
 # =========================================================
 
 def convert_value(value):
     """
-    Convert numeric-looking strings into numbers.
-    Leave normal text unchanged.
+    Convert string values to int or float when possible.
     """
 
     if not isinstance(value, str):
@@ -79,31 +85,28 @@ def convert_value(value):
 
 
 # =========================================================
-# Apply One Condition
+# CONDITION HANDLING
 # =========================================================
 
-def apply_condition(df, column, operator, value):
+def apply_condition(
+    df,
+    column,
+    operator,
+    value,
+):
     """
-    Apply one comparison condition to a DataFrame.
+    Apply one filtering condition to a DataFrame.
     """
-
-    # -----------------------------------------------------
-    # Validate column
-    # -----------------------------------------------------
 
     if column not in df.columns:
         raise ValueError(
             f"Column '{column}' does not exist."
         )
 
-    # -----------------------------------------------------
-    # Convert value
-    # -----------------------------------------------------
-
     value = convert_value(value)
 
     # -----------------------------------------------------
-    # Text comparison
+    # TEXT VALUES
     # -----------------------------------------------------
 
     if isinstance(value, str):
@@ -115,21 +118,29 @@ def apply_condition(df, column, operator, value):
             .str.lower()
         )
 
-        comparison_value = value.strip().lower()
+        comparison_value = (
+            value
+            .strip()
+            .lower()
+        )
 
         if operator == "==":
-            return df[series == comparison_value]
+            return df[
+                series == comparison_value
+            ]
 
         if operator == "!=":
-            return df[series != comparison_value]
+            return df[
+                series != comparison_value
+            ]
 
         raise ValueError(
-            f"Operator '{operator}' cannot be used "
-            f"with text values."
+            f"Operator '{operator}' cannot be "
+            "used with text values."
         )
 
     # -----------------------------------------------------
-    # Numeric comparison
+    # NUMERIC VALUES
     # -----------------------------------------------------
 
     series = df[column]
@@ -157,13 +168,12 @@ def apply_condition(df, column, operator, value):
     )
 
 
-# =========================================================
-# Apply All Conditions
-# =========================================================
-
-def apply_conditions(df, conditions):
+def apply_conditions(
+    df,
+    conditions,
+):
     """
-    Apply all query conditions to the DataFrame.
+    Apply all supplied conditions.
     """
 
     if not conditions:
@@ -189,70 +199,74 @@ def apply_conditions(df, conditions):
             df,
             column,
             operator,
-            value
+            value,
         )
 
     return df
 
 
 # =========================================================
-# Execute Query
+# TOOL 1
+# STANDARD SCHOOL DATA QUERY
 # =========================================================
 
-def execute_query(
-    dataset,
-    operation,
-    column=None,
-    conditions=None,
-    group_by=None,
-    numerator_conditions=None,
+def query_school_data(
+    dataset: str,
+    operation: str,
+    column: str = None,
+    conditions: list = None,
+    group_by: str = None,
 ):
     """
-    Execute a structured query against school data.
-    """
+    Query school datasets using safe, predefined operations.
 
-    # -----------------------------------------------------
-    # Validate dataset
-    # -----------------------------------------------------
+    This tool can retrieve records, count records,
+    calculate sums, averages, minimums, maximums,
+    and grouped results.
+
+    Available datasets:
+    students, marks, fees, attendance,
+    complaints, sports, teachers
+
+    Available operations:
+    records, count, sum, average, min, max
+
+    Conditions use:
+    ==, !=, >, <, >=, <=
+
+    The model chooses the dataset, operation,
+    columns, filters, and grouping.
+    """
 
     if dataset not in DATASETS:
         raise ValueError(
             f"Unknown dataset: {dataset}"
         )
 
-    # -----------------------------------------------------
-    # Validate operation
-    # -----------------------------------------------------
-
     if operation not in SUPPORTED_OPERATIONS:
         raise ValueError(
             f"Unsupported operation: {operation}"
         )
 
-    # -----------------------------------------------------
-    # Get dataset
-    # -----------------------------------------------------
-
     df = DATASETS[dataset].copy()
 
     # -----------------------------------------------------
-    # Apply filters / conditions
+    # FILTER
     # -----------------------------------------------------
 
     df = apply_conditions(
         df,
-        conditions
+        conditions or [],
     )
 
-    # -----------------------------------------------------
-    # No matching records
-    # -----------------------------------------------------
-
     if df.empty:
-        return None
+        return {
+            "status": "no_data",
+            "message": "No matching records were found.",
+        }
 
     # -----------------------------------------------------
-    # Grouped query
+    # GROUPED QUERY
     # -----------------------------------------------------
 
     if group_by:
@@ -260,12 +274,10 @@ def execute_query(
         if group_by not in df.columns:
             raise ValueError(
                 f"Group column '{group_by}' "
-                f"does not exist."
+                "does not exist."
             )
 
-        # -------------------------------------------------
-        # Group count
-        # -------------------------------------------------
+        # COUNT BY GROUP
 
         if operation == "count":
 
@@ -275,11 +287,14 @@ def execute_query(
                 .reset_index(name="count")
             )
 
-            return result
+            return {
+                "status": "success",
+                "result": result.to_dict(
+                    orient="records"
+                ),
+            }
 
-        # -------------------------------------------------
-        # Group numerical calculations
-        # -------------------------------------------------
+        # NUMERIC AGGREGATIONS BY GROUP
 
         if operation in {
             "sum",
@@ -297,10 +312,12 @@ def execute_query(
             if column not in df.columns:
                 raise ValueError(
                     f"Column '{column}' "
-                    f"does not exist."
+                    "does not exist."
                 )
 
-            grouped = df.groupby(group_by)[column]
+            grouped = df.groupby(
+                group_by
+            )[column]
 
             if operation == "sum":
                 result = grouped.sum()
@@ -314,28 +331,48 @@ def execute_query(
             else:
                 result = grouped.max()
 
-            return result.reset_index(
-                name=operation
+            result = (
+                result
+                .reset_index(
+                    name=operation
+                )
             )
 
+            return {
+                "status": "success",
+                "result": result.to_dict(
+                    orient="records"
+                ),
+            }
+
     # -----------------------------------------------------
-    # Return records
+    # RECORDS
     # -----------------------------------------------------
 
     if operation == "records":
 
-        return df.head(100)
+        result = df.head(100)
+
+        return {
+            "status": "success",
+            "result": result.to_dict(
+                orient="records"
+            ),
+        }
 
     # -----------------------------------------------------
-    # Count
+    # COUNT
     # -----------------------------------------------------
 
     if operation == "count":
 
-        return len(df)
+        return {
+            "status": "success",
+            "result": len(df),
+        }
 
     # -----------------------------------------------------
-    # Numerical operations
+    # AGGREGATIONS
     # -----------------------------------------------------
 
     if operation in {
@@ -354,55 +391,224 @@ def execute_query(
         if column not in df.columns:
             raise ValueError(
                 f"Column '{column}' "
-                f"does not exist."
+                "does not exist."
             )
 
         if operation == "sum":
-            return df[column].sum()
+            value = df[column].sum()
 
-        if operation == "average":
-            return df[column].mean()
+        elif operation == "average":
+            value = df[column].mean()
 
-        if operation == "min":
-            return df[column].min()
+        elif operation == "min":
+            value = df[column].min()
 
-        if operation == "max":
-            return df[column].max()
+        else:
+            value = df[column].max()
 
-    # -----------------------------------------------------
-    # Percentage
-    # -----------------------------------------------------
-
-    if operation == "percentage":
-
-        if not numerator_conditions:
-            raise ValueError(
-                "Percentage query requires "
-                "numerator_conditions."
-            )
-
-        numerator_df = apply_conditions(
-            df.copy(),
-            numerator_conditions
-        )
-
-        numerator = len(numerator_df)
-        denominator = len(df)
-
-        if denominator == 0:
-            return 0
-
-        percentage = (
-            numerator / denominator
-        ) * 100
-
-        return round(percentage, 2)
-
-    # -----------------------------------------------------
-    # Safety fallback
-    # -----------------------------------------------------
+        return {
+            "status": "success",
+            "result": value,
+        }
 
     raise ValueError(
-        f"Unable to execute operation "
-        f"'{operation}'."
+        f"Unable to execute operation: {operation}"
+    )
+
+
+# =========================================================
+# TOOL 2
+# SCHOOL BUSINESS METRICS
+# =========================================================
+
+def get_school_metric(
+    metric: str,
+    academic_year: str = None,
+    class_value: int = None,
+    threshold: float = None,
+    employment_status: str = None,
+):
+    """
+    Calculate predefined school business metrics.
+
+    Available metrics:
+
+    student_pass_percentage
+    total_revenue
+    total_outstanding_fees
+    average_attendance
+    students_below_attendance
+    pending_complaints
+    active_student_count
+    sports_participation
+    teacher_count
+
+    This tool is used for business calculations that
+    require predefined school-specific logic.
+    """
+
+    # -----------------------------------------------------
+    # PASS PERCENTAGE
+    # -----------------------------------------------------
+
+    if metric == "student_pass_percentage":
+
+        result = student_pass_percentage(
+            academic_year=academic_year,
+            class_value=class_value,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    # -----------------------------------------------------
+    # TOTAL REVENUE
+    # -----------------------------------------------------
+
+    if metric == "total_revenue":
+
+        result = total_revenue(
+            academic_year=academic_year,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    # -----------------------------------------------------
+    # OUTSTANDING FEES
+    # -----------------------------------------------------
+
+    if metric == "total_outstanding_fees":
+
+        result = total_outstanding_fees(
+            academic_year=academic_year,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    # -----------------------------------------------------
+    # AVERAGE ATTENDANCE
+    # -----------------------------------------------------
+
+    if metric == "average_attendance":
+
+        result = average_attendance(
+            academic_year=academic_year,
+            class_value=class_value,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    # -----------------------------------------------------
+    # LOW ATTENDANCE
+    # -----------------------------------------------------
+
+    if metric == "students_below_attendance":
+
+        if threshold is None:
+            raise ValueError(
+                "Attendance threshold is required."
+            )
+
+        result = students_below_attendance(
+            threshold=threshold,
+            academic_year=academic_year,
+            class_value=class_value,
+        )
+
+        if result is None:
+            return {
+                "status": "no_data",
+                "metric": metric,
+                "result": [],
+            }
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result.to_dict(
+                orient="records"
+            ),
+        }
+
+    # -----------------------------------------------------
+    # PENDING COMPLAINTS
+    # -----------------------------------------------------
+
+    if metric == "pending_complaints":
+
+        result = pending_complaints_count(
+            academic_year=academic_year,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    # -----------------------------------------------------
+    # ACTIVE STUDENTS
+    # -----------------------------------------------------
+
+    if metric == "active_student_count":
+
+        result = active_student_count(
+            academic_year=academic_year,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    # -----------------------------------------------------
+    # SPORTS PARTICIPATION
+    # -----------------------------------------------------
+
+    if metric == "sports_participation":
+
+        result = sports_participation_count(
+            academic_year=academic_year,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    # -----------------------------------------------------
+    # TEACHER COUNT
+    # -----------------------------------------------------
+
+    if metric == "teacher_count":
+
+        result = teacher_count(
+            employment_status=employment_status,
+        )
+
+        return {
+            "status": "success",
+            "metric": metric,
+            "result": result,
+        }
+
+    raise ValueError(
+        f"Unsupported school metric: {metric}"
     )
